@@ -31,6 +31,18 @@ TIMETABLE_FILE = "timetable_schedule.xlsx"
 SEMESTER_START = date(2026, 1, 12)
 SEMESTER_END = date(2026, 5, 7)
 
+# Branch Mapping for Full Academic Titles
+BRANCH_MAP = {
+    "AIML": "Artificial Intelligence and Machine Learning",
+    "CSE": "Computer Science and Engineering",
+    "MECH": "Mechanical Engineering",
+    "CIVIL": "Civil Engineering",
+    "ENTC": "Electronics and Telecommunication Engineering",
+    "ELEC": "Electrical Engineering",
+    "INSTRU": "Instrumentation and Control Engineering",
+    "META": "Metallurgical Engineering"
+}
+
 # --------------------------------------------------
 # 3. DYNAMIC THEME STYLING
 # --------------------------------------------------
@@ -64,7 +76,6 @@ dark_theme = {
 current_theme = light_theme if st.session_state.theme == 'light' else dark_theme
 
 # Generate CSS
-# Generate CSS
 st.markdown(f"""
 <style>
 @import url('https://fonts.googleapis.com/css2?family=Poppins:wght@400;500;600;700;800&display=swap');
@@ -78,6 +89,7 @@ st.markdown(f"""
     --table-row-hover: {current_theme['table_row_hover']};
     --sec-btn-bg: {current_theme['secondary_btn_bg']};
     --sec-btn-text: {current_theme['secondary_btn_text']};
+    --footer-color: {current_theme['text_color']};
 }}
 
 /* BACKGROUND & GLOBAL FONT */
@@ -114,13 +126,12 @@ div[data-baseweb="popover"], div[data-baseweb="tooltip"] {{
     box-shadow: 0 4px 15px var(--card-shadow) !important;
 }}
 div[data-baseweb="popover"] *, div[data-baseweb="tooltip"] * {{
-    color: #FF0000 !important; /* Bright Red */
+    color: #FF0000 !important;
     -webkit-text-fill-color: #FF0000 !important;
     font-weight: 700 !important;
 }}
 
 /* 3. INPUT BOX FIX ("Press Enter to apply" & Placeholders) */
-/* Set the dark background */
 div[data-baseweb="input"] {{
     background-color: #262730 !important; 
     border-radius: 50px !important;
@@ -128,7 +139,6 @@ div[data-baseweb="input"] {{
     box-shadow: inset 0 2px 4px rgba(0,0,0,0.5);
 }}
 
-/* Force the typed text to be RED */
 div[data-baseweb="input"] input {{
     color: #FF0000 !important;
     caret-color: #FF0000 !important;
@@ -136,7 +146,6 @@ div[data-baseweb="input"] input {{
     font-weight: 600 !important;
 }}
 
-/* Force the Placeholder ("e.g. 612572034") to be RED */
 div[data-baseweb="input"] input::placeholder {{
     color: #FF0000 !important;
     -webkit-text-fill-color: #FF0000 !important;
@@ -148,7 +157,6 @@ div[data-baseweb="input"] input::-webkit-input-placeholder {{
     -webkit-text-fill-color: #FF0000 !important;
 }}
 
-/* NEW: Force "Press Enter to apply" Instruction to be RED */
 div[data-testid="InputInstructions"] > span, 
 div[data-testid="InputInstructions"] {{
     color: #FF0000 !important;
@@ -158,7 +166,6 @@ div[data-testid="InputInstructions"] {{
 }}
 
 /* --- BUTTONS --- */
-/* Target BOTH standard buttons and download buttons */
 div.stButton > button, div.stDownloadButton > button {{
     width: 100% !important;
     height: 80px !important;        
@@ -170,7 +177,7 @@ div.stButton > button, div.stDownloadButton > button {{
     align-items: center !important;
     justify-content: center !important;
     border-radius: 15px !important;
-    font-size: 13px !important;      
+    font-size: 13px !important;     
     text-align: center !important;
 }}
 
@@ -184,7 +191,6 @@ div.stButton > button[kind="primary"] {{
 div.stButton > button[kind="primary"] * {{ color: #ffffff !important; }}
 div.stButton > button[kind="primary"]:hover {{ transform: translateY(-2px); box-shadow: 0 6px 15px rgba(106, 17, 203, 0.3); }}
 
-/* Explicitly style secondary/default buttons AND download buttons to match */
 div.stButton > button[kind="secondary"], div.stDownloadButton > button {{
     background-color: var(--sec-btn-bg) !important; 
     color: var(--sec-btn-text) !important; 
@@ -417,12 +423,6 @@ def is_fuzzy_match(str1, str2):
     return SequenceMatcher(None, str1, str2).ratio() > 0.85
 
 def parse_time(time_str):
-    """
-    Parses time strings like '10:30 TO 12:30' or '11:00 - 12:30'.
-    Returns:
-       start_str: String (e.g., "11:00")
-       duration: Float (hours, e.g., 1.5)
-    """
     if pd.isna(time_str): return None, 1.0
     
     # Normalize string
@@ -453,10 +453,6 @@ def parse_time(time_str):
     return start_str, duration
 
 def map_to_slot(time_str, slots):
-    """
-    Maps a start time (e.g. 11:00) to the nearest previous slot (e.g. 10:30).
-    Allows a delay of up to 30 mins.
-    """
     try:
         t = datetime.strptime(time_str, "%H:%M")
         best, min_diff = None, 999
@@ -465,10 +461,6 @@ def map_to_slot(time_str, slots):
             slot_time = datetime.strptime(s, "%H:%M")
             diff = (t - slot_time).total_seconds() / 60
             
-            # Logic: We are looking for a slot that is equal to or BEFORE the time
-            # But not too far before (max 30 mins).
-            # e.g. 11:00 matches 10:30 (diff +30)
-            # e.g. 10:30 matches 10:30 (diff 0)
             if 0 <= diff <= 30:
                 if diff < min_diff:
                     min_diff = diff
@@ -533,12 +525,10 @@ def generate_master_ics(weekly_schedule, semester_end_date):
             
             start_h, start_m = map(int, cls['StartTime'].split(':'))
             
-            # Fix 12-hour crossover for PM classes
             if start_h < 8:
                 start_h += 12
 
             dt_start = datetime.combine(start_date, datetime.min.time()).replace(hour=start_h, minute=start_m)
-            # Use a rough int duration for ICS block logic
             dt_end = dt_start + timedelta(hours=cls.get('Duration', 1)) 
             
             fmt = "%Y%m%dT%H%M%S"
@@ -556,45 +546,32 @@ def generate_master_ics(weekly_schedule, semester_end_date):
 
 
 def normalize_venue(venue_text):
-    """Cleans up venue names to ensure 'AC 101' matches 'ac101'."""
     if pd.isna(venue_text) or str(venue_text).strip() in ["-", "", "nan"]:
         return None
     return str(venue_text).strip().upper()
 
 def get_vacant_venues(sched_df, target_day, target_time_str):
-    """
-    Returns a list of venues that are NOT occupied at the specific Day and Time.
-    Filters out labs/restricted areas and fixes 12-hour format ambiguity.
-    """
     if sched_df is None or sched_df.empty:
         return []
 
-    # --- CONFIG: Venues to Ignore (Labs, Auditorium, etc.) ---
-    # These will NEVER appear in the "Available" list.
     IGNORED_VENUES = ["COGNIZANT", "CS LAB", "EP LAB", "EC LAB", "CHEM LAB", "PHY LAB", "FPL LAB"]
 
-    # 1. Parse the Target Time
     try:
         q_time = datetime.strptime(target_time_str, "%H:%M").time()
     except:
-        return [] # Invalid time format
+        return [] 
 
-    # 2. Identify ALL known venues (Filtering out the ignored ones)
     venue_col = next((c for c in sched_df.columns if "Venue" in c), None)
     if not venue_col: return []
     
     all_venues = set()
     for v in sched_df[venue_col].unique():
         norm = normalize_venue(v)
-        
-        # FILTER LOGIC: Skip if it's in our ignored list
         if norm and norm not in IGNORED_VENUES: 
             all_venues.add(norm)
 
-    # 3. Find Occupied Venues
     occupied_venues = set()
     
-    # Filter by Day
     day_col = next((c for c in sched_df.columns if "Day" in c), None)
     time_col = next((c for c in sched_df.columns if "Time" in c), None)
     
@@ -605,10 +582,8 @@ def get_vacant_venues(sched_df, target_day, target_time_str):
         start_str, duration = parse_time(row[time_col])
         if start_str:
             try:
-                # Basic Parse
                 class_start = datetime.strptime(start_str, "%H:%M")
                 
-                # AM/PM Fix: If class starts before 8:00, assume PM (e.g. 1:30 -> 13:30)
                 if class_start.hour < 8:
                     class_start = class_start.replace(hour=class_start.hour + 12)
                 
@@ -618,7 +593,6 @@ def get_vacant_venues(sched_df, target_day, target_time_str):
                 s_mins = class_start.hour * 60 + class_start.minute
                 e_mins = class_end.hour * 60 + class_end.minute
                 
-                # Check Overlap
                 if q_mins >= s_mins and q_mins < e_mins:
                     occ_venue = normalize_venue(row[venue_col])
                     if occ_venue:
@@ -626,7 +600,6 @@ def get_vacant_venues(sched_df, target_day, target_time_str):
             except:
                 continue
 
-    # 4. Subtract Occupied from All to get Vacant
     vacant = sorted(list(all_venues - occupied_venues))
     return vacant
 
@@ -658,17 +631,14 @@ def load_data():
 
 def get_schedule(mis, sub_dfs, sched_df):
     found_subs = []
-    # Initialize defaults
-    name = "Unknown"
-    branch = "General" 
+    name = "Harshal Amit Jagiasi"
+    branch = "Artificial Intelligence and Machine Learning" 
     target_mis = clean_mis(mis)
     
-    # 1. Find User Subjects & Info across ALL sheets
     for df in sub_dfs:
         mis_col = next((c for c in df.columns if "MIS" in c.upper()), None)
         if not mis_col: continue
         
-        # Create helper key for matching
         df["_KEY"] = df[mis_col].apply(clean_mis)
         match = df[df["_KEY"] == target_mis]
         
@@ -676,8 +646,7 @@ def get_schedule(mis, sub_dfs, sched_df):
             row = match.iloc[0]
             
             # --- A. NAME LOGIC ---
-            # Capture name from the first sheet that has it
-            if name == "Unknown":
+            if name == "Harshal Amit Jagiasi":
                 name_col = next((c for c in df.columns if "Name" in c), None)
                 if name_col:
                     found_name = str(row[name_col]).strip()
@@ -685,18 +654,12 @@ def get_schedule(mis, sub_dfs, sched_df):
                         name = found_name
 
             # --- B. IMPROVED BRANCH LOGIC ---
-            # Look for a branch column in THIS specific sheet
             branch_col = next((c for c in df.columns if "Branch" in c), None)
             if branch_col:
                 found_branch = str(row[branch_col]).strip()
-                
-                # Update 'branch' only if:
-                # 1. We currently have the default "General"
-                # 2. The new found_branch is VALID (not "General", empty, or "nan")
                 is_valid = found_branch and found_branch.lower() not in ["nan", "", "-", "general"]
-                
-                if branch == "General" and is_valid:
-                    branch = found_branch
+                if is_valid:
+                    branch = BRANCH_MAP.get(found_branch.upper(), found_branch)
 
             # --- C. SUBJECT EXTRACTION ---
             sub_col = next((c for c in df.columns if "Subject" in c or "Title" in c), None)
@@ -710,7 +673,6 @@ def get_schedule(mis, sub_dfs, sched_df):
                     "Batch": str(row[batch_col]) if batch_col else ""
                 })
     
-    # 2. Map to Timetable (Standard Logic)
     timetable = []
     if sched_df is not None and found_subs:
         cols = sched_df.columns
@@ -773,11 +735,9 @@ def render_grid(entries):
     
     for e in entries:
         if e['Day'] in days:
-            # New mapping logic
             slot = map_to_slot(e['StartTime'], slots)
             if slot:
                 grid[slot][e['Day']] = e
-                # Merge cells logic
                 if e['Duration'] > 1:
                     idx = slots.index(slot)
                     for i in range(1, e['Duration']):
@@ -794,7 +754,6 @@ def render_grid(entries):
                 span = f'rowspan="{cell["Duration"]}"' if cell['Duration'] > 1 else ''
                 grad = get_subject_gradient(cell['Subject'])
                 
-                # --- OFFSET RENDER LOGIC ---
                 if cell.get('IsOffset', False) and cell.get('DurationFloat', 1) == 1.5:
                      html += f'''
                     <td {span} style="padding:0; vertical-align: top;">
@@ -811,7 +770,6 @@ def render_grid(entries):
                     </td>
                     '''
                 else:
-                    # Normal Render
                     html += f'<td {span}><div class="class-card filled" style="background:{grad}"><div class="batch-badge">{cell["Type"]}</div><div class="sub-title">{cell["Subject"]}</div><div class="sub-meta">📍 {cell["Venue"]}</div></div></td>'
             else:
                 html += '<td><div class="class-card type-empty"></div></td>'
@@ -849,12 +807,9 @@ def calculate_semester_totals(timetable_entries):
         totals[key] = 0
     
     curr_date = SEMESTER_START
-    # CHANGE: Stop counting at today's date instead of SEMESTER_END
-    # to get "Total lectures taken place till now"
     end_date = date.today() 
     
     while curr_date <= end_date:
-        # Don't count future dates if SEMESTER_START is in future
         if curr_date > SEMESTER_END: break 
         
         day_name = curr_date.strftime("%A")
@@ -869,7 +824,6 @@ def calculate_semester_totals(timetable_entries):
 # 8. NEW: LEADERBOARD & BRANCH HELPERS
 # --------------------------------------------------
 
-
 def get_leaderboard_data():
     """Fetches live scores with debug error handling."""
     try:
@@ -877,80 +831,59 @@ def get_leaderboard_data():
         sheet_url = st.secrets["game_sheet_url"]
         sh = client.open_by_url(sheet_url)
 
-
-        
-        # STRICT CHECK: Try to find 'Leaderboard'. 
-        # If not found, print error instead of silently loading wrong sheet.
         try:
             sheet = sh.worksheet("Leaderboard")
         except gspread.exceptions.WorksheetNotFound:
             st.error("⚠️ Error: Tab named 'Leaderboard' not found in Google Sheet.")
             return pd.DataFrame()
 
-        # Get all data
         data = sheet.get_all_values()
         
-        # ERROR CHECK: Empty Data
         if not data or len(data) < 2: 
             return pd.DataFrame()
             
-        # Parse Headers and Rows
         header = data[0]
         rows = data[1:]
         
-        # create DataFrame
         df = pd.DataFrame(rows, columns=header)
         
-        # CLEANUP: Fix columns if they are missing
         expected_cols = ["Score", "Branch", "Name", "MIS"]
         for c in expected_cols:
             if c not in df.columns: df[c] = ""
 
-        # CONVERT TYPES: Force Score to be an integer
-        # This fixes the "sorting by text" bug (where 9 > 1000)
         df['Score'] = pd.to_numeric(df['Score'], errors='coerce').fillna(0).astype(int)
         
         return df
 
     except Exception as e:
-        # If connection fails, show why
         st.error(f"Connection Error: {e}")
         return pd.DataFrame()
 
 def render_leaderboard_ui(user_branch):
     """Draws the Leaderboard UI (Title + Cards + Button)."""
     
-    # 1. Title (Inside function to prevent duplication)
     st.markdown("""<h3 style="font-size: 24px; font-weight: 700; margin-bottom: 20px;">🏆 Branch Wars</h3>""", unsafe_allow_html=True)
     st.caption("Top champion from every branch.")
 
-    # 2. Fetch Data
     df = get_leaderboard_data()
 
     if df.empty:
         st.info("No records yet. Play to claim the throne!")
-        # Add refresh button even if empty, so user can retry
         if st.button("🔄 Refresh"): st.rerun()
         return
 
-    # 3. LOGIC: Sort by Score -> Drop Duplicates on Branch
-    # This ensures we only keep the HIGHEST score for "Artificial Intelligence..."
     best_per_branch = df.sort_values(by='Score', ascending=False).drop_duplicates(subset=['Branch'])
     
-    # 4. Render Cards
     for _, row in best_per_branch.iterrows():
         b_name = str(row['Branch']).strip()
         score = row['Score']
         
-        # Name Fallback
         p_name = str(row.get('Name', '')).strip()
         if not p_name or p_name.lower() == 'nan':
              p_name = f"MIS: {row.get('MIS', 'Unknown')}"
         
-        # Highlight User's Branch
         is_my_branch = user_branch and (b_name.lower() == str(user_branch).strip().lower())
         
-        # Styles
         border = "2px solid #6a11cb" if is_my_branch else "1px solid rgba(128,128,128,0.2)"
         bg = "rgba(106,17,203,0.05)" if is_my_branch else "var(--card-bg)"
         icon = "👑" if is_my_branch else "🛡️"
@@ -968,7 +901,6 @@ def render_leaderboard_ui(user_branch):
         </div>
         """, unsafe_allow_html=True)
 
-    # 5. Single Refresh Button
     st.write("")
     if st.button("🔄 Check for Updates", use_container_width=True):
         st.cache_data.clear()
@@ -1271,7 +1203,6 @@ def render_game_html():
 </html>
 """
 
-
 def render_connected_game(mis, branch, user_name):
     """Injects USER DATA + BRIDGE into the game."""
     html_content = render_game_html()
@@ -1280,24 +1211,22 @@ def render_connected_game(mis, branch, user_name):
     if not script_url: return html_content
 
     # JAVASCRIPT INJECTION
-    # We add 'const USER_NAME' and include it in the payload
     injection_code = f"""
     <script>
         const USER_MIS = "{mis}";
         const USER_BRANCH = "{branch}";
-        const USER_NAME = "{user_name}"; // <--- NEW: Name Variable
+        const USER_NAME = "{user_name}"; 
         const GOOGLE_URL = "{script_url}";
 
         function sendScoreToBackend(finalScore) {{
             if (!GOOGLE_URL || finalScore === 0) return;
             
-            // Log to console for debugging
             console.log("Attempting to save score...", finalScore);
             
             const payload = {{
                 mis: USER_MIS,
                 branch: USER_BRANCH,
-                name: USER_NAME,  // <--- NEW: Sending Name
+                name: USER_NAME,  
                 score: finalScore
             }};
             
@@ -1398,8 +1327,6 @@ else:
             with st.expander("Subject Allocation List", expanded=False):
                 st.markdown(render_subject_html(subs, link_map), unsafe_allow_html=True)
 
-            # ... existing code for displaying timetable grid ...
-            
             # --- NEW: SMART VACANT ROOM FINDER ---
             st.markdown("""<hr style="border:1px solid rgba(128,128,128,0.2); margin: 40px 0;">""", unsafe_allow_html=True)
             
@@ -1429,13 +1356,11 @@ else:
             if current_day in days_list:
                 curr_mins = now.hour * 60 + now.minute
                 
-                # ...AND current time is within the valid schedule range (8:30 to 18:30)
                 # We iterate to find which slot the student is currently sitting in.
                 for i, s in enumerate(slots):
                     h, m = map(int, s.split(':'))
                     slot_mins = h * 60 + m
                     
-                    # If current time is within a slot (e.g., 10:45 falls in 10:30-11:30)
                     if slot_mins <= curr_mins < (slot_mins + 60):
                         def_day_idx = days_list.index(current_day)
                         def_time_idx = i
@@ -1456,16 +1381,13 @@ else:
                 st.button("Search 🔎", type="primary", key="btn_find_room")
 
             # --- Calculation & Render ---
-            # --- Calculation & Render ---
             vacant_rooms = get_vacant_venues(sched_df, selected_day, selected_time)
             
             st.markdown(f"**Found {len(vacant_rooms)} vacant rooms for {selected_day} at {selected_time}:**")
             
             if vacant_rooms:
-                # We build the string in a single line to avoid Markdown indentation errors
                 cards_html = '<div class="vacant-grid">'
                 for room in vacant_rooms:
-                    # --- FLOOR MAPPING LOGIC START ---
                     r_clean = str(room).upper().strip()
                     floor_msg = "Available" # Default fallback
 
@@ -1477,9 +1399,7 @@ else:
                         floor_msg = "Third Floor"
                     elif r_clean in ["NC11", "NC12", "NC13", "NC14"]:
                         floor_msg = "Fourth Floor"
-                    # --- FLOOR MAPPING LOGIC END ---
 
-                    # Inject the floor_msg variable into the HTML string
                     cards_html += f'<div class="vacant-card"><h4>{room}</h4><p>{floor_msg}</p></div>'
                 
                 cards_html += "</div>"
@@ -1489,7 +1409,6 @@ else:
             
             st.markdown("</div>", unsafe_allow_html=True) # Close Container
             
-            # ... continue to Attendance Tracker ...
             
             # --- 2. ATTENDANCE TRACKER ---
             st.markdown("""<hr style="border:1px solid rgba(128,128,128,0.2); margin: 40px 0;">""", unsafe_allow_html=True)
@@ -1498,7 +1417,12 @@ else:
             col_date, col_daily_list = st.columns([1, 3])
             with col_date:
                 st.markdown("##### Select Date")
-                selected_date = st.date_input("Pick a day", value=date.today(), min_value=SEMESTER_START, max_value=SEMESTER_END)
+                
+                # 🛠 FIX APPLIED HERE: Clamping date.today() between SEMESTER_START and SEMESTER_END
+                today = date.today()
+                default_date = max(SEMESTER_START, min(today, SEMESTER_END))
+                
+                selected_date = st.date_input("Pick a day", value=default_date, min_value=SEMESTER_START, max_value=SEMESTER_END)
                 day_name = selected_date.strftime("%A")
                 st.caption(f"Schedule for **{day_name}**")
 
@@ -1531,7 +1455,6 @@ else:
 
             # --- 3. CALCULATOR ---
             st.markdown("""<hr style="border:1px solid rgba(128,128,128,0.2); margin: 40px 0;">""", unsafe_allow_html=True)
-            # ... existing code above ...
             st.markdown("""<h3 style="font-size: 28px; font-weight: 700; margin-bottom: 20px; background: linear-gradient(to right, #6a11cb, #fbc2eb); -webkit-background-clip: text; -webkit-text-fill-color: transparent;">📊 Attendance Calculator</h3>""", unsafe_allow_html=True)
             
             total_possible = calculate_semester_totals(table)
@@ -1546,14 +1469,12 @@ else:
                     if len(parts) >= 5 and parts[0] == mis and parts[2] == subject_name and parts[3] == subject_type:
                         attended += 1
                 
-                # 1. Calculate Current Percentage
                 percentage = (attended / total_count * 100) if total_count > 0 else 100.0
                 
-                # 2. Define Styles based on Percentage
                 border_grad = "linear-gradient(135deg, #6a11cb, #2575fc)"
                 is_dark = st.session_state.theme == 'dark'
                 bg_color = "rgba(106, 17, 203, 0.05)" if is_dark else "#f0f0f0"
-                msg_color = "#2ecc71" # Green by default
+                msg_color = "#2ecc71" 
 
                 if percentage < 60:
                     border_grad = "linear-gradient(135deg, #ff9a9e, #fecfef)" 
@@ -1563,22 +1484,15 @@ else:
                     border_grad = "linear-gradient(135deg, #f6d365, #fda085)"
                     bg_color = "rgba(255, 165, 0, 0.05)" if is_dark else "#fffdf5"
                     msg_color = "#e67e22"
-
-                # 3. Calculate "Need to Attend" or "Safe to Bunk"
-                # Formula derived from: (Attended + X) / (Total + X) >= 0.75
-                # Result: X >= 3*Total - 4*Attended
                 
                 shortfall_x = (3 * total_count) - (4 * attended)
                 
                 status_msg = ""
                 
                 if shortfall_x > 0:
-                    # Need to attend more
                     status_msg = f"Attend next <b>{shortfall_x}</b> lectures to hit 75%"
                     msg_color = "#e74c3c" if percentage < 75 else "#e67e22"
                 else:
-                    # Already above 75%, calculate how many they can miss
-                    # Formula: A / (T + Y) >= 0.75  =>  Y <= (4A - 3T) / 3
                     bunkable = int((4 * attended - 3 * total_count) / 3)
                     if bunkable > 0:
                         status_msg = f"On Track! You can miss <b>{bunkable}</b> lectures."
@@ -1608,12 +1522,10 @@ else:
             with c_game:
                 st.markdown("""<h3 style="font-size: 28px; font-weight: 700; margin-bottom: 20px; background: linear-gradient(to right, #6a11cb, #fbc2eb); -webkit-background-clip: text; -webkit-text-fill-color: transparent;">🎮 Stress Buster</h3>""", unsafe_allow_html=True)
                 
-                # Render Game
                 game_html = render_connected_game(mis, branch, name)
                 components.html(game_html, height=650, scrolling=False)
             
             with c_leaderboard:
-                # ONLY call the function. Do not add extra st.markdown headers here.
                 render_leaderboard_ui(branch)
 
         else:
@@ -1626,24 +1538,6 @@ else:
 footer_color = "var(--footer-color)"
 st.markdown(f"""
 <div style="text-align: center; margin-top: 50px; font-size: 13px; color: {footer_color};">
-    Student Portal © 2026 • Built by <span style="color:#6a11cb; font-weight:700">HARSHAL [AIML]</span>
+    Student Portal © 2026 • Built by <span style="color:#6a11cb; font-weight:700">Harshal Amit Jagiasi [Artificial Intelligence and Machine Learning]</span>
 </div>
 """, unsafe_allow_html=True)
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
