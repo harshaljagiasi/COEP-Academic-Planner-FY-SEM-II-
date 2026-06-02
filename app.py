@@ -418,6 +418,11 @@ def normalize_batch(text):
     nums = re.findall(r'\d+', clean)
     return f"b{nums[0]}" if nums else "all"
 
+def normalize_branch(branch_str):
+    if pd.isna(branch_str): return "General"
+    b = str(branch_str).strip().upper()
+    return BRANCH_MAP.get(b, str(branch_str).strip())
+
 def is_fuzzy_match(str1, str2):
     if str1 in str2 or str2 in str1: return True
     return SequenceMatcher(None, str1, str2).ratio() > 0.85
@@ -1414,14 +1419,17 @@ else:
             st.markdown("""<hr style="border:1px solid rgba(128,128,128,0.2); margin: 40px 0;">""", unsafe_allow_html=True)
             st.markdown("""<h3 style="font-size: 28px; font-weight: 700; margin-bottom: 20px; background: linear-gradient(to right, #6a11cb, #fbc2eb); -webkit-background-clip: text; -webkit-text-fill-color: transparent;">✅ Attendance Tracker</h3>""", unsafe_allow_html=True)
 
+            # --- FIX: Date Clamping and Celebration Message ---
+            today = date.today()
+            if today > SEMESTER_END:
+                st.success("🎉 The semester is officially over! Enjoy your break!")
+                default_date = SEMESTER_END
+            else:
+                default_date = max(SEMESTER_START, today)
+
             col_date, col_daily_list = st.columns([1, 3])
             with col_date:
                 st.markdown("##### Select Date")
-                
-                # 🛠 FIX APPLIED HERE: Clamping date.today() between SEMESTER_START and SEMESTER_END
-                today = date.today()
-                default_date = max(SEMESTER_START, min(today, SEMESTER_END))
-                
                 selected_date = st.date_input("Pick a day", value=default_date, min_value=SEMESTER_START, max_value=SEMESTER_END)
                 day_name = selected_date.strftime("%A")
                 st.caption(f"Schedule for **{day_name}**")
