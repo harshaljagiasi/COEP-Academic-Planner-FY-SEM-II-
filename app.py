@@ -1419,13 +1419,16 @@ else:
             st.markdown("""<hr style="border:1px solid rgba(128,128,128,0.2); margin: 40px 0;">""", unsafe_allow_html=True)
             st.markdown("""<h3 style="font-size: 28px; font-weight: 700; margin-bottom: 20px; background: linear-gradient(to right, #6a11cb, #fbc2eb); -webkit-background-clip: text; -webkit-text-fill-color: transparent;">✅ Attendance Tracker</h3>""", unsafe_allow_html=True)
 
-            # --- FIX: Date Clamping and Celebration Message ---
+            # --- FIX: Date Clamping & Semester Over Logic ---
             today = date.today()
+            
             if today > SEMESTER_END:
-                st.success("🎉 The semester is officially over! Enjoy your break!")
+                st.success("🎉 The semester is officially over! Enjoy your break! You can still view past schedules below.")
                 default_date = SEMESTER_END
+            elif today < SEMESTER_START:
+                default_date = SEMESTER_START
             else:
-                default_date = max(SEMESTER_START, today)
+                default_date = today
 
             col_date, col_daily_list = st.columns([1, 3])
             with col_date:
